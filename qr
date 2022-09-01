@@ -1,0 +1,607 @@
+package com.android.codescanner;
+
+import java.util.Objects;
+
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.util.AttributeSet;
+import android.util.LayoutDirection;
+import android.view.MotionEvent;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+
+import androidx.annotation.AttrRes;
+import androidx.annotation.ColorInt;
+import androidx.annotation.FloatRange;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.Px;
+import androidx.annotation.StyleRes;
+
+/**
+ * A view to display code scanner preview
+ *
+ * @see CodeScanner
+ */
+public final class CodeScannerView extends ViewGroup {
+
+    private static final boolean DEFAULT_AUTO_FOCUS_BUTTON_VISIBLE = true;
+    private static final boolean DEFAULT_FLASH_BUTTON_VISIBLE = true;
+    private static final boolean DEFAULT_MASK_VISIBLE = true;
+    private static final boolean DEFAULT_FRAME_VISIBLE = true;
+    private static final boolean DEFAULT_FRAME_CORNERS_CAP_ROUNDED = false;
+    private static final int DEFAULT_MASK_COLOR = 0x77000000;
+    private static final int DEFAULT_FRAME_COLOR = Color.WHITE;
+    private static final int DEFAULT_AUTO_FOCUS_BUTTON_COLOR = Color.WHITE;
+    private static final int DEFAULT_FLASH_BUTTON_COLOR = Color.WHITE;
+    private static final int HINT_VIEW_INDEX = 4;
+    private static final int MAX_CHILD_COUNT = 5;
+    private static final float DEFAULT_FRAME_THICKNESS_DP = 2f;
+    private static final float DEFAULT_FRAME_ASPECT_RATIO_WIDTH = 1f;
+    private static final float DEFAULT_FRAME_ASPECT_RATIO_HEIGHT = 1f;
+    private static final float DEFAULT_FRAME_CORNER_SIZE_DP = 50f;
+    private static final float DEFAULT_FRAME_CORNERS_RADIUS_DP = 0f;
+    private static final float DEFAULT_FRAME_SIZE = 0.75f;
+    private static final float DEFAULT_FRAME_VERTICAL_BIAS = 0.5f;
+    private static final float DEFAULT_BUTTON_PADDING_DP = 16f;
+    private static final float FOCUS_AREA_SIZE_DP = 20f;
+    private static final ButtonPosition DEFAULT_AUTO_FOCUS_BUTTON_POSITION =
+            ButtonPosition.TOP_START;
+    private static final ButtonPosition DEFAULT_FLASH_BUTTON_POSITION = ButtonPosition.TOP_END;
+    private SurfaceView mPreviewView;
+    private ViewFinderView mViewFinderView;
+    private ImageView mAutoFocusButton;
+    private ButtonPosition mAutoFocusButtonPosition;
+    private int mAutoFocusButtonPaddingHorizontal;
+    private int mAutoFocusButtonPaddingVertical;
+    private int mAutoFocusButtonColor;
+    private Drawable mAutoFocusButtonOnIcon;
+    private Drawable mAutoFocusButtonOffIcon;
+    private ImageView mFlashButton;
+    private ButtonPosition mFlashButtonPosition;
+    private int mFlashButtonPaddingHorizontal;
+    private int mFlashButtonPaddingVertical;
+    private int mFlashButtonColor;
+    private Drawable mFlashButtonOnIcon;
+    private Drawable mFlashButtonOffIcon;
+
+    @Nullable
+    private Point mPreviewSize;
+
+    @Nullable
+    private SizeListener mSizeListener;
+
+    @Nullable
+    private CodeScanner mCodeScanner;
+
+    private int mFocusAreaSize;
+
+    /**
+     * A view to display code scanner preview
+     *
+     * @see CodeScanner
+     */
+    public CodeScannerView(@NonNull final Context context) {
+        super(context);
+        initialize(context, null, 0, 0);
+    }
+
+    /**
+     * A view to display code scanner preview
+     *
+     * @see CodeScanner
+     */
+    public CodeScannerView(@NonNull final Context context, @Nullable final AttributeSet attrs) {
+        super(context, attrs);
+        initialize(context, attrs, 0, 0);
+    }
+
+    /**
+     * A view to display code scanner preview
+     *
+     * @see CodeScanner
+     */
+    public CodeScannerView(@NonNull final Context context, @Nullable final AttributeSet attrs,
+                           @AttrRes final int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        initialize(context, attrs, defStyleAttr, 0);
+    }
+
+    /**
+     * A view to display code scanner preview
+     *
+     * @see CodeScanner
+     */
+    public CodeScannerView(final Context context, final AttributeSet attrs,
+                           @AttrRes final int defStyleAttr, @StyleRes final int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        initialize(context, attrs, defStyleAttr, defStyleRes);
+    }
+
+    private void initialize(@NonNull final Context context, @Nullable final AttributeSet attrs,
+                            @AttrRes final int defStyleAttr, @StyleRes final int defStyleRes) {
+        mPreviewView = new SurfaceView(context);
+        mViewFinderView = new ViewFinderView(context);
+        final float density = context.getResources().getDisplayMetrics().density;
+        final int defaultButtonPadding = Math.round(density * DEFAULT_BUTTON_PADDING_DP);
+        mFocusAreaSize = Math.round(density * FOCUS_AREA_SIZE_DP);
+        mAutoFocusButton = new ImageView(context);
+        mAutoFocusButton.setScaleType(ImageView.ScaleType.CENTER);
+        mAutoFocusButton.setOnClickListener(new AutoFocusClickListener());
+        mFlashButton = new ImageView(context);
+        mFlashButton.setScaleType(ImageView.ScaleType.CENTER);
+        mFlashButton.setOnClickListener(new FlashClickListener());
+        if (attrs == null) {
+            setFrameAspectRatio(DEFAULT_FRAME_ASPECT_RATIO_WIDTH,
+                    DEFAULT_FRAME_ASPECT_RATIO_HEIGHT);
+            setMaskColor(DEFAULT_MASK_COLOR);
+            setMaskVisible(DEFAULT_MASK_VISIBLE);
+            setFrameColor(DEFAULT_FRAME_COLOR);
+            setFrameVisible(DEFAULT_FRAME_VISIBLE);
+            setFrameThickness(Math.round(DEFAULT_FRAME_THICKNESS_DP * density));
+            setFrameCornersSize(Math.round(DEFAULT_FRAME_CORNER_SIZE_DP * density));
+            setFrameCornersRadius(Math.round(DEFAULT_FRAME_CORNERS_RADIUS_DP * density));
+            setFrameCornersCapRounded(DEFAULT_FRAME_CORNERS_CAP_ROUNDED);
+            setFrameSize(DEFAULT_FRAME_SIZE);
+            setFrameVerticalBias(DEFAULT_FRAME_VERTICAL_BIAS);
+            setAutoFocusButtonColor(DEFAULT_AUTO_FOCUS_BUTTON_COLOR);
+            setFlashButtonColor(DEFAULT_FLASH_BUTTON_COLOR);
+            setAutoFocusButtonVisible(DEFAULT_AUTO_FOCUS_BUTTON_VISIBLE);
+            setAutoFocusButtonPosition(DEFAULT_AUTO_FOCUS_BUTTON_POSITION);
+            setFlashButtonVisible(DEFAULT_FLASH_BUTTON_VISIBLE);
+            setFlashButtonPosition(DEFAULT_FLASH_BUTTON_POSITION);
+            setAutoFocusButtonPaddingHorizontal(defaultButtonPadding);
+            setAutoFocusButtonPaddingVertical(defaultButtonPadding);
+            setFlashButtonPaddingHorizontal(defaultButtonPadding);
+            setFlashButtonPaddingVertical(defaultButtonPadding);
+            setAutoFocusButtonOnIcon(context.getDrawable(R.drawable.ic_code_scanner_auto_focus_on));
+            setAutoFocusButtonOffIcon(
+                    context.getDrawable(R.drawable.ic_code_scanner_auto_focus_off));
+            setFlashButtonOnIcon(context.getDrawable(R.drawable.ic_code_scanner_flash_on));
+            setFlashButtonOffIcon(context.getDrawable(R.drawable.ic_code_scanner_flash_off));
+        } else {
+            TypedArray a = null;
+            try {
+                a = context.getTheme()
+                        .obtainStyledAttributes(attrs, R.styleable.CodeScannerView, defStyleAttr,
+                                defStyleRes);
+                setMaskColor(a.getColor(R.styleable.CodeScannerView_maskColor, DEFAULT_MASK_COLOR));
+                setMaskVisible(a.getBoolean(R.styleable.CodeScannerView_maskVisible,
+                        DEFAULT_MASK_VISIBLE));
+                setFrameColor(
+                        a.getColor(R.styleable.CodeScannerView_frameColor, DEFAULT_FRAME_COLOR));
+                setFrameVisible(a.getBoolean(R.styleable.CodeScannerView_frameVisible,
+                        DEFAULT_FRAME_VISIBLE));
+                setFrameThickness(
+                        a.getDimensionPixelOffset(R.styleable.CodeScannerView_frameThickness,
+                                Math.round(DEFAULT_FRAME_THICKNESS_DP * density)));
+                setFrameCornersSize(
+                        a.getDimensionPixelOffset(R.styleable.CodeScannerView_frameCornersSize,
+                                Math.round(DEFAULT_FRAME_CORNER_SIZE_DP * density)));
+                setFrameCornersRadius(
+                        a.getDimensionPixelOffset(R.styleable.CodeScannerView_frameCornersRadius,
+                                Math.round(DEFAULT_FRAME_CORNERS_RADIUS_DP * density)));
+                setFrameCornersCapRounded(
+                        a.getBoolean(R.styleable.CodeScannerView_frameCornersCapRounded,
+                                DEFAULT_FRAME_CORNERS_CAP_ROUNDED));
+                setFrameAspectRatio(a.getFloat(R.styleable.CodeScannerView_frameAspectRatioWidth,
+                        DEFAULT_FRAME_ASPECT_RATIO_WIDTH),
+                        a.getFloat(R.styleable.CodeScannerView_frameAspectRatioHeight,
+                                DEFAULT_FRAME_ASPECT_RATIO_HEIGHT));
+                setFrameSize(a.getFloat(R.styleable.CodeScannerView_frameSize, DEFAULT_FRAME_SIZE));
+                setFrameVerticalBias(a.getFloat(R.styleable.CodeScannerView_frameVerticalBias,
+                        DEFAULT_FRAME_VERTICAL_BIAS));
+                setAutoFocusButtonVisible(
+                        a.getBoolean(R.styleable.CodeScannerView_autoFocusButtonVisible,
+                                DEFAULT_AUTO_FOCUS_BUTTON_VISIBLE));
+                setAutoFocusButtonColor(a.getColor(R.styleable.CodeScannerView_autoFocusButtonColor,
+                        DEFAULT_AUTO_FOCUS_BUTTON_COLOR));
+                setAutoFocusButtonPosition(buttonPositionFromAttr(
+                        a.getInt(R.styleable.CodeScannerView_autoFocusButtonPosition,
+                                indexOfButtonPosition(DEFAULT_AUTO_FOCUS_BUTTON_POSITION))));
+                setAutoFocusButtonPaddingHorizontal(a.getDimensionPixelOffset(
+                        R.styleable.CodeScannerView_autoFocusButtonPaddingHorizontal,
+                        defaultButtonPadding));
+                setAutoFocusButtonPaddingVertical(a.getDimensionPixelOffset(
+                        R.styleable.CodeScannerView_autoFocusButtonPaddingVertical,
+                        defaultButtonPadding));
+                final Drawable autoFocusButtonOnIcon =
+                        a.getDrawable(R.styleable.CodeScannerView_autoFocusButtonOnIcon);
+                setAutoFocusButtonOnIcon(autoFocusButtonOnIcon != null ? autoFocusButtonOnIcon :
+                        context.getDrawable(R.drawable.ic_code_scanner_auto_focus_on));
+                final Drawable autoFocusButtonOffIcon =
+                        a.getDrawable(R.styleable.CodeScannerView_autoFocusButtonOffIcon);
+                setAutoFocusButtonOffIcon(autoFocusButtonOffIcon != null ? autoFocusButtonOffIcon :
+                        context.getDrawable(R.drawable.ic_code_scanner_auto_focus_off));
+                setFlashButtonVisible(a.getBoolean(R.styleable.CodeScannerView_flashButtonVisible,
+                        DEFAULT_FLASH_BUTTON_VISIBLE));
+                setFlashButtonColor(a.getColor(R.styleable.CodeScannerView_flashButtonColor,
+                        DEFAULT_FLASH_BUTTON_COLOR));
+                setFlashButtonPosition(buttonPositionFromAttr(
+                        a.getInt(R.styleable.CodeScannerView_flashButtonPosition,
+                                indexOfButtonPosition(DEFAULT_FLASH_BUTTON_POSITION))));
+                setFlashButtonPaddingHorizontal(a.getDimensionPixelOffset(
+                        R.styleable.CodeScannerView_flashButtonPaddingHorizontal,
+                        defaultButtonPadding));
+                setFlashButtonPaddingVertical(a.getDimensionPixelOffset(
+                        R.styleable.CodeScannerView_flashButtonPaddingVertical,
+                        defaultButtonPadding));
+                final Drawable flashButtonOnIcon =
+                        a.getDrawable(R.styleable.CodeScannerView_flashButtonOnIcon);
+                setFlashButtonOnIcon(flashButtonOnIcon != null ? flashButtonOnIcon :
+                        context.getDrawable(R.drawable.ic_code_scanner_flash_on));
+                final Drawable flashButtonOffIcon =
+                        a.getDrawable(R.styleable.CodeScannerView_flashButtonOffIcon);
+                setFlashButtonOffIcon(flashButtonOffIcon != null ? flashButtonOffIcon :
+                        context.getDrawable(R.drawable.ic_code_scanner_flash_off));
+            } finally {
+                if (a != null) {
+                    a.recycle();
+                }
+            }
+        }
+        if (isInEditMode()) {
+            setAutoFocusEnabled(true);
+            setFlashEnabled(true);
+        }
+        addView(mPreviewView,
+                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        addView(mViewFinderView,
+                new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        addView(mAutoFocusButton, new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        addView(mFlashButton, new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
+
+    @Override
+    protected void onMeasure(final int widthMeasureSpec, final int heightMeasureSpec) {
+        final int childCount = getChildCount();
+        if (childCount > MAX_CHILD_COUNT) {
+            throw new IllegalStateException("CodeScannerView can have zero or one child");
+        }
+        measureChildWithMargins(mPreviewView, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        measureChildWithMargins(mViewFinderView, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        measureChildWithMargins(mAutoFocusButton, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        measureChildWithMargins(mFlashButton, widthMeasureSpec, 0, heightMeasureSpec, 0);
+        if (childCount == MAX_CHILD_COUNT) {
+            final Rect frameRect = mViewFinderView.getFrameRect();
+            measureChildWithMargins(getChildAt(HINT_VIEW_INDEX), widthMeasureSpec, 0,
+                    heightMeasureSpec, frameRect != null ? frameRect.getBottom() : 0);
+        }
+        setMeasuredDimension(getDefaultSize(getSuggestedMinimumWidth(), widthMeasureSpec),
+                getDefaultSize(getSuggestedMinimumHeight(), heightMeasureSpec));
+    }
+
+    @Override
+    protected void onLayout(final boolean changed, final int left, final int top, final int right,
+                            final int bottom) {
+        final int childCount = getChildCount();
+        if (childCount > MAX_CHILD_COUNT) {
+            throw new IllegalStateException("CodeScannerView can have zero or one child");
+        }
+        final int width = right - left;
+        final int height = bottom - top;
+        final Point previewSize = mPreviewSize;
+        if (previewSize == null) {
+            mPreviewView.layout(0, 0, width, height);
+        } else {
+            int frameLeft = 0;
+            int frameTop = 0;
+            int frameRight = width;
+            int frameBottom = height;
+            final int previewWidth = previewSize.getX();
+            if (previewWidth > width) {
+                final int d = (previewWidth - width) / 2;
+                frameLeft -= d;
+                frameRight += d;
+            }
+            final int previewHeight = previewSize.getY();
+            if (previewHeight > height) {
+                final int d = (previewHeight - height) / 2;
+                frameTop -= d;
+                frameBottom += d;
+            }
+            mPreviewView.layout(frameLeft, frameTop, frameRight, frameBottom);
+        }
+        mViewFinderView.layout(0, 0, width, height);
+        layoutButton(mAutoFocusButton, mAutoFocusButtonPosition, width, height);
+        layoutButton(mFlashButton, mFlashButtonPosition, width, height);
+        if (childCount == MAX_CHILD_COUNT) {
+            final Rect frameRect = mViewFinderView.getFrameRect();
+            final int viewTop = frameRect != null ? frameRect.getBottom() : 0;
+            final View hintView = getChildAt(HINT_VIEW_INDEX);
+            final int paddingLeft = getPaddingLeft();
+            final int paddingTop = getPaddingTop();
+            if (hintView.getVisibility() != GONE) {
+                final LayoutParams lp = (LayoutParams) hintView.getLayoutParams();
+                final int childLeft = paddingLeft + lp.leftMargin;
+                final int childTop = paddingTop + lp.topMargin + viewTop;
+                hintView.layout(childLeft, childTop, childLeft + hintView.getMeasuredWidth(),
+                        childTop + hintView.getMeasuredHeight());
+            }
+        }
+    }
+
+    @Override
+    protected void onSizeChanged(final int width, final int height, final int oldWidth,
+                                 final int oldHeight) {
+        final SizeListener listener = mSizeListener;
+        if (listener != null) {
+            listener.onSizeChanged(width, height);
+        }
+    }
+
+    @Override
+    @SuppressLint("ClickableViewAccessibility")
+    public boolean onTouchEvent(@NonNull final MotionEvent event) {
+        final CodeScanner codeScanner = mCodeScanner;
+        final Rect frameRect = getFrameRect();
+        final int x = (int) event.getX();
+        final int y = (int) event.getY();
+        if (codeScanner != null && frameRect != null &&
+                codeScanner.isAutoFocusSupportedOrUnknown() && codeScanner.isTouchFocusEnabled() &&
+                event.getAction() == MotionEvent.ACTION_DOWN && frameRect.isPointInside(x, y)) {
+            final int areaSize = mFocusAreaSize;
+            codeScanner.performTouchFocus(
+                    new Rect(x - areaSize, y - areaSize, x + areaSize, y + areaSize).fitIn(
+                            frameRect));
+        }
+        return super.onTouchEvent(event);
+    }
+
+    @Override
+    protected boolean checkLayoutParams(@Nullable final ViewGroup.LayoutParams p) {
+        return p instanceof LayoutParams;
+    }
+
+    @NonNull
+    @Override
+    public ViewGroup.LayoutParams generateLayoutParams(@Nullable final AttributeSet attrs) {
+        return new LayoutParams(getContext(), attrs);
+    }
+
+    @NonNull
+    @Override
+    protected ViewGroup.LayoutParams generateLayoutParams(@NonNull final ViewGroup.LayoutParams p) {
+        if (p instanceof MarginLayoutParams) {
+            return new LayoutParams((MarginLayoutParams) p);
+        } else {
+            return new LayoutParams(p);
+        }
+    }
+
+    @NonNull
+    @Override
+    protected ViewGroup.LayoutParams generateDefaultLayoutParams() {
+        return new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+    }
+
+    /**
+     * Get current mask color
+     *
+     * @see #setMaskColor
+     */
+    @ColorInt
+    public int getMaskColor() {
+        return mViewFinderView.getMaskColor();
+    }
+
+    /**
+     * Set color of the space outside of the framing rect
+     *
+     * @param color Mask color
+     */
+    public void setMaskColor(@ColorInt final int color) {
+        mViewFinderView.setMaskColor(color);
+    }
+
+    /**
+     * Whether if mask is currently visible
+     *
+     * @see #setMaskVisible
+     */
+    public boolean isMaskVisible() {
+        return mViewFinderView.isMaskVisible();
+    }
+
+    /**
+     * Set whether mask is visible or not
+     *
+     * @param visible Visibility
+     */
+    public void setMaskVisible(final boolean visible) {
+        mViewFinderView.setMaskVisible(visible);
+    }
+
+    /**
+     * Get current frame color
+     *
+     * @see #setFrameColor
+     */
+    @ColorInt
+    public int getFrameColor() {
+        return mViewFinderView.getFrameColor();
+    }
+
+    /**
+     * Set color of the frame
+     *
+     * @param color Frame color
+     */
+    public void setFrameColor(@ColorInt final int color) {
+        mViewFinderView.setFrameColor(color);
+    }
+
+    /**
+     * Whether if frame is currently visible
+     *
+     * @see #setFrameVisible
+     */
+    public boolean isFrameVisible() {
+        return mViewFinderView.isFrameVisible();
+    }
+
+    /**
+     * Set whether frame is visible or not
+     *
+     * @param visible Visibility
+     */
+    public void setFrameVisible(final boolean visible) {
+        mViewFinderView.setFrameVisible(visible);
+    }
+
+    /**
+     * Get current frame thickness
+     *
+     * @see #setFrameThickness
+     */
+    @Px
+    public int getFrameThickness() {
+        return mViewFinderView.getFrameThickness();
+    }
+
+    /**
+     * Set frame thickness
+     *
+     * @param thickness Frame thickness in pixels
+     */
+    public void setFrameThickness(@Px final int thickness) {
+        if (thickness < 0) {
+            throw new IllegalArgumentException("Frame thickness can't be negative");
+        }
+        mViewFinderView.setFrameThickness(thickness);
+    }
+
+    /**
+     * Get current frame corners size
+     *
+     * @see #setFrameCornersSize
+     */
+    @Px
+    public int getFrameCornersSize() {
+        return mViewFinderView.getFrameCornersSize();
+    }
+
+    /**
+     * Set size of the frame corners
+     *
+     * @param size Size in pixels
+     */
+    public void setFrameCornersSize(@Px final int size) {
+        if (size < 0) {
+            throw new IllegalArgumentException("Frame corners size can't be negative");
+        }
+        mViewFinderView.setFrameCornersSize(size);
+    }
+
+    /**
+     * Get current frame corners radius
+     *
+     * @see #setFrameCornersRadius
+     */
+    @Px
+    public int getFrameCornersRadius() {
+        return mViewFinderView.getFrameCornersRadius();
+    }
+
+    /**
+     * Set current frame corners radius
+     *
+     * @param radius Frame corners radius in pixels
+     */
+    public void setFrameCornersRadius(@Px final int radius) {
+        if (radius < 0) {
+            throw new IllegalArgumentException("Frame corners radius can't be negative");
+        }
+        mViewFinderView.setFrameCornersRadius(radius);
+    }
+
+    /**
+     * Whether if frame corners cap is currently rounded
+     *
+     * @see #setFrameVisible
+     */
+    public boolean isFrameCornersCapRounded() {
+        return mViewFinderView.isFrameCornersCapRounded();
+    }
+
+    /**
+     * Set whether frame corners cap is rounded or not
+     *
+     * @param rounded Rounded cap
+     */
+    public void setFrameCornersCapRounded(final boolean rounded) {
+        mViewFinderView.setFrameCornersCapRounded(rounded);
+    }
+
+    /**
+     * Get current frame size
+     *
+     * @see #setFrameSize
+     */
+    @FloatRange(from = 0.1, to = 1.0)
+    public float getFrameSize() {
+        return mViewFinderView.getFrameSize();
+    }
+
+    /**
+     * Set relative frame size where 1.0 means full size
+     *
+     * @param size Relative frame size between 0.1 and 1.0
+     */
+    public void setFrameSize(@FloatRange(from = 0.1, to = 1) final float size) {
+        if (size < 0.1 || size > 1) {
+            throw new IllegalArgumentException(
+                    "Max frame size value should be between 0.1 and 1, inclusive");
+        }
+        mViewFinderView.setFrameSize(size);
+    }
+
+    @FloatRange(from = 0.0f, to = 1.0f)
+    public float getFrameVerticalBias() {
+        return mViewFinderView.getFrameVerticalBias();
+    }
+
+    public void setFrameVerticalBias(@FloatRange(from = 0.0f, to = 1.0f) final float bias) {
+        if (bias < 0f || bias > 1f) {
+            throw new IllegalArgumentException(
+                    "Max frame size value should be between 0 and 1, inclusive");
+        }
+        mViewFinderView.setFrameVerticalBias(bias);
+    }
+
+    /**
+     * Get current frame aspect ratio width
+     *
+     * @see #setFrameAspectRatioWidth
+     * @see #setFrameAspectRatio
+     */
+    @FloatRange(from = 0, fromInclusive = false)
+    public float getFrameAspectRatioWidth() {
+        return mViewFinderView.getFrameAspectRatioWidth();
+    }
+
+    /**
+     * Set frame aspect ratio width
+     *
+     * @param ratioWidth Frame aspect ratio width
+     * @see #setFrameAspectRatio
+     */
+    public void setFrameAspectRatioWidth(
+            @FloatRange(from = 0, fromInclusive = false) final float ratioWidth) {
+        if (ratioWidth <= 0) {
+            throw new IllegalArgumentException(
+                    "Frame aspect ratio values should be greater than zero");
+        }
+        mViewFinderView.setFrameAspectRatioWidth(ratioWidth);
+    }
+
+    /**
+     *
